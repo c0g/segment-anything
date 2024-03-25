@@ -219,7 +219,7 @@ class SamAutomaticMaskGenerator:
             )
             data.filter(keep_by_nms)
 
-        data.to_numpy()
+        # data.to_numpy()
         return data
 
     def _process_crop(
@@ -260,7 +260,6 @@ class SamAutomaticMaskGenerator:
         data["boxes"] = uncrop_boxes_xyxy(data["boxes"], crop_box)
         data["points"] = uncrop_points(data["points"], crop_box)
         data["crop_boxes"] = torch.tensor([crop_box for _ in range(len(data["rles"]))])
-
         return data
 
     def _process_batch(

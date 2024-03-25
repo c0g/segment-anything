@@ -11,6 +11,9 @@ from segment_anything.modeling import Sam
 
 from typing import Optional, Tuple
 
+from torch.profiler import record_function
+
+
 from .utils.transforms import ResizeLongestSide
 
 
@@ -165,7 +168,8 @@ class SamPredictor:
         low_res_masks_np = low_res_masks[0].detach().cpu().numpy()
         return masks_np, iou_predictions_np, low_res_masks_np
 
-    @torch.no_grad()
+    # @torch.no_grad()
+    @torch.compile(fullgraph=True, mode='reduce-overhead')
     def predict_torch(
         self,
         point_coords: Optional[torch.Tensor],
@@ -210,6 +214,9 @@ class SamPredictor:
             of masks and H=W=256. These low res logits can be passed to
             a subsequent iteration as mask input.
         """
+        
+                
+        # import pdb; pdb.set_trace()
         if not self.is_image_set:
             raise RuntimeError("An image must be set with .set_image(...) before mask prediction.")
 
@@ -219,23 +226,27 @@ class SamPredictor:
             points = None
 
         # Embed prompts
-        sparse_embeddings, dense_embeddings = self.model.prompt_encoder(
-            points=points,
-            boxes=boxes,
-            masks=mask_input,
-        )
 
+        with record_function("prompt_embedding"):
+          sparse_embeddings, dense_embeddings = self.model.prompt_encoder(
+              points=points,
+              boxes=boxes,
+              masks=mask_input,
+          )
+        
         # Predict masks
-        low_res_masks, iou_predictions = self.model.mask_decoder(
-            image_embeddings=self.features,
-            image_pe=self.model.prompt_encoder.get_dense_pe(),
-            sparse_prompt_embeddings=sparse_embeddings,
-            dense_prompt_embeddings=dense_embeddings,
-            multimask_output=multimask_output,
-        )
-
+        with record_function("mask_decoder"):
+          low_res_masks, iou_predictions = self.model.mask_decoder(
+              image_embeddings=self.features,
+              image_pe=self.model.prompt_encoder.get_dense_pe(),
+              sparse_prompt_embeddings=sparse_embeddings,
+              dense_prompt_embeddings=dense_embeddings,
+              multimask_output=multimask_output,
+          )
+        
         # Upscale the masks to the original image resolution
-        masks = self.model.postprocess_masks(low_res_masks, self.input_size, self.original_size)
+        with record_function("postprocess_masks"):
+          masks = self.model.postprocess_masks(low_res_masks, self.input_size, self.original_size)
 
         if not return_logits:
             masks = masks > self.model.mask_threshold

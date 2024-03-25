@@ -80,13 +80,13 @@ class TwoWayTransformer(nn.Module):
         """
         # BxCxHxW -> BxHWxC == B x N_image_tokens x C
         bs, c, h, w = image_embedding.shape
-        image_embedding = image_embedding.flatten(2).permute(0, 2, 1)
+        image_embedding = image_embedding.flatten(2).permute(0, 2, 1).to(image_pe.dtype)
         image_pe = image_pe.flatten(2).permute(0, 2, 1)
+        point_embedding = point_embedding.to(image_pe.dtype)
 
         # Prepare queries
         queries = point_embedding
         keys = image_embedding
-
         # Apply transformer blocks and final layernorm
         for layer in self.layers:
             queries, keys = layer(
